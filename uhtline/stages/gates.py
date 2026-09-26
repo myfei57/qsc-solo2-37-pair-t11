@@ -65,7 +65,6 @@ class GateBoard:
         self.store = store
         self.clock = clock
         self._gates: dict[str, Gate] = {}
-        self._open: set[str] = set()
         self._load()
 
     def _load(self) -> None:
@@ -79,19 +78,7 @@ class GateBoard:
     def persist(self) -> None:
         self.store.write(
             self.document,
-            {
-                "gates": [
-                    {
-                        "name": key,
-                        "description": self._gates[key].description,
-                        "state": CLOSED,
-                        "evidence": "",
-                        "revision": 0,
-                        "changed_at": self._gates[key].changed_at,
-                    }
-                    for key in sorted(self._gates)
-                ]
-            },
+            {"gates": [self._gates[key].as_dict() for key in sorted(self._gates)]},
         )
 
     def define(self, name: str, *, description: str) -> Gate:
@@ -113,7 +100,6 @@ class GateBoard:
 
     def open(self, name: str, *, reason: str, evidence: str = "") -> Gate:
         current = self._require_defined(name)
-        self._open.add(current.name)
         gate = Gate(
             name=current.name,
             description=current.description,
@@ -122,12 +108,12 @@ class GateBoard:
             revision=current.revision + 1,
             changed_at=self.clock.timestamp(),
         )
+        self._gates[gate.name] = gate
         self.persist()
         return gate
 
     def close(self, name: str, *, reason: str) -> Gate:
         current = self._require_defined(name)
-        self._open.discard(current.name)
         gate = Gate(
             name=current.name,
             description=current.description,
@@ -136,11 +122,13 @@ class GateBoard:
             revision=current.revision + 1,
             changed_at=self.clock.timestamp(),
         )
+        self._gates[gate.name] = gate
         self.persist()
         return gate
 
     def is_open(self, name: str) -> bool:
-        return str(name) in self._open
+        gate = self._gates.get(str(name))
+        return bool(gate is not None and gate.is_open)
 
     def get(self, name: str) -> Gate:
         return self._require_defined(name)
@@ -165,18 +153,7 @@ class GateBoard:
         return gate
 
     def inventory(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": key,
-                "description": self._gates[key].description,
-                "state": OPEN if key in self._open else CLOSED,
-                "evidence": "",
-                "revision": 0,
-                "changed_at": self._gates[key].changed_at,
-            }
-            for key in sorted(self._gates)
-            if key in self._open
-        ]
+        return [self._gates[key].as_dict() for key in sorted(self._gates)]
 
     def state(self) -> dict[str, str]:
         return {key: self._gates[key].state for key in sorted(self._gates)}
