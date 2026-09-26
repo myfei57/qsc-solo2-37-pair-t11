@@ -168,6 +168,7 @@ class StageMachine:
             reason=str(reason),
             timestamp=self.clock.timestamp(),
         )
+        self._history.append(transition)
         self._stage = target
         self.persist()
         self.audit.record("stage", target.value, str(reason), cause=None)
